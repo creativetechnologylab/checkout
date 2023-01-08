@@ -1,0 +1,9 @@
+extends ../../../src/views/base.pug
+
+block prepend title
+	- title = `Markdown`
+	- breadcrumb.push({name: title})
+	- menu = 'catalogue'
+
+block contents
+	pre=md

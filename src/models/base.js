@@ -126,6 +126,30 @@ class BaseModel {
 	}
 
 	/**
+	 * Remove multiple rows at once
+	 *
+	 * @param {Array} ids
+	 * @param {Object} values
+	 */
+	removeMultiple(ids) {
+		return new Promise((resolve, reject) => {
+			const query = this.query().getMultipleByIds(ids).delete()
+
+			this.logQuery(query, 'removeMultiple')
+
+			query.then(ids => {
+					resolve(ids)
+				})
+				.catch(err => {
+					reject(err)
+				})
+				.finally(() => {
+					this._reset()
+				})
+		})
+	}
+
+	/**
 	 * Makes sure a query has been created
 	 * and creates one if not
 	 *
@@ -164,14 +188,23 @@ class BaseModel {
 	 * Creates a new knex query and attaches the
 	 * models default selects to it
 	 */
-	query() {
+	 query(all_properties = false) {
 		this._queryObj = db(this.options.table)
 
 		if (this.properties.length) {
-			this._queryObj.select(this._propertiesToSelect(this.properties))
+			this._queryObj.select(this._propertiesToSelect(all_properties?this.allProperties:this.properties))
 		}
 
 		this.lookup(this.bootstrap)
+
+		return this
+	}
+
+	/**
+	 * Creates a new empty knex query
+	 */
+	 emptyQuery() {
+		this._queryObj = db(this.options.table)
 
 		return this
 	}
@@ -255,6 +288,19 @@ class BaseModel {
 					break
 			}
 		})
+
+		return this
+	}
+
+	/**
+	 * Adds a group by to the query
+	 *
+	 * @param {Array} args Single value
+	 */
+	groupBy(column) {
+		this._safeguard()
+
+		this._queryObj.groupBy(column)
 
 		return this
 	}
@@ -347,7 +393,7 @@ class BaseModel {
 	 * @param {Number} id
 	 */
 	getById(id) {
-		return this.where([['id', id]]).retrieveSingle()
+		return this.query().where([['id', id]]).retrieveSingle()
 	}
 
 	/**
@@ -359,6 +405,13 @@ class BaseModel {
 	getMultipleByIds(ids) {
 		const query = this.query().expose()
 		this.logQuery(query, 'getMultipleByIds')
+
+		if (!Array.isArray(ids)) {
+			let newArray = []
+			newArray.push(ids)
+			ids = newArray
+		}
+
 		return query.whereIn(`${this.options.table}.id`, ids)
 	}
 

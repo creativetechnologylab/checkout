@@ -2,6 +2,8 @@ const PDFDocument = require('pdfkit')
 const bwipjs = require('bwip-js')
 const ipp = require('ipp')
 
+const Options = require('./options')()
+
 const Print = {
 	label: function(code, printer) {
 		Print.labels([code], printer)
@@ -19,8 +21,13 @@ const Print = {
 			var code = codes[c]
 			switch(code.type) {
 				default:
+				case '9mm':
+					size = "Custom.9x12mm"
+					barcodes.push(Print.add9mmLabel(doc, code.barcode, code.text, code.brand))
+					break
+
 				case '12mm':
-					size = "Custom.12x18mm"
+					size = "Custom.12x17mm"
 					barcodes.push(Print.add12mmLabel(doc, code.barcode, code.text, code.brand))
 					break
 
@@ -46,11 +53,37 @@ const Print = {
 			Print.send(buffer, printer, size)
 		})
 	},
+	add9mmLabel: function(doc, barcode, text) {
+		return new Promise(function(resolve, reject) {
+			Print.generate2DBarcodeImage(barcode).then(function(png) {
+			var page = doc.addPage({
+				size: [pt(10), pt(9)],
+				layout: 'landscape',
+				margin: 0
+			})
+
+			page.image(png, pt(1), pt(1), {
+				width: pt(7),
+				height: pt(7)
+			})
+
+			page.fontSize(3)
+			page.font('Helvetica')
+			
+			page.text(barcode, pt(1), pt(8.5), {
+				width: pt(7),
+				align: 'left'
+			})
+
+			resolve(page)
+			})
+		})
+	},
 	add12mmLabel: function(doc, barcode, text, brand) {
 		return new Promise(function(resolve, reject) {
 			Print.generate2DBarcodeImage(barcode).then(function(png) {
 			var page = doc.addPage({
-				size: [pt(18), pt(12)],
+				size: [pt(17), pt(12)],
 				layout: 'landscape',
 				margin: 0
 			})
@@ -64,14 +97,14 @@ const Print = {
 				lineGap: -1.5
 			})
 
-			page.image(png, pt(1), pt(6), {
+			page.image(png, pt(1), pt(5.5), {
 				width: pt(9),
 				height: pt(9)
 			})
 
 			page.fontSize(4)
 			page.font('Helvetica')
-			page.text(barcode, pt(1), pt(16), {
+			page.text(barcode, pt(1), pt(15), {
 				width: pt(9),
 				align: 'left'
 			})
@@ -180,9 +213,8 @@ const Print = {
 				"media": [size]
 			},
 			"operation-attributes-tag": {
-				"requesting-user-name": process.env.ORG_NAME ? process.env.ORG_NAME : process.env.APP_NAME,
+				"requesting-user-name": Options.getText('application_name'),
 				"job-name": "Labels",
-				"requesting-user-name": process.env.APP_NAME,
 				"document-format": "application/pdf",
 			},
 			data: Buffer.concat(buffer)

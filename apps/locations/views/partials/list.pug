@@ -17,19 +17,17 @@ if locations.length > 0
 			tbody
 				for location in locations
 					tr
-						td=location.name
-						td: +clipboard( location.barcode )
+						td(data-searchable=location.name)=location.name
+						td(data-searchable=location.barcode): +clipboard( location.barcode )
 						if currentUserCan('items_read')
 							td
-								+btn( 'sm', 'outline-dark', 'box', 'Items', '/items/?location=' + location.id )
+								+btn( 'sm', 'outline-secondary', 'box', 'Items', '/items/?location=' + location.id )
 						if currentUserCan({or:['locations_edit','locations_remove','print']})
 							td
 								if location.barcode && currentUserCan('print')
 									+labelBtn( '/locations/' + location.id + '/label' )
-									+space
 								if currentUserCan('locations_edit')
 									+editBtn( '/locations/' + location.id + '/edit' )
-									+space
 								if currentUserCan('locations_remove')
 									+removeBtn( '/locations/' + location.id + '/remove' )
 else

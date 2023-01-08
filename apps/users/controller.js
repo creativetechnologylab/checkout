@@ -4,6 +4,9 @@ const config = require('./config.json')
 const BaseController = require('../../src/js/common/BaseController.js')
 const auth = require('../../src/js/authentication')
 
+const Options = require('../../src/js/options')()
+const Mail = require('../../src/js/mail')()
+
 const Courses = require('../../src/models/courses')
 const Users = require('../../src/models/users')
 const Years = require('../../src/models/years')
@@ -103,23 +106,24 @@ class UsersController extends BaseController {
 		})
 	}
 
-	postEdit(req, res) {
-		const singleItemCheck = (edit) => {
-			if (!Array.isArray(edit)) {
-				this.displayError(
-					req,
-					res,
-					'Only one user was selected for group editing, use the single edit form',
-					this.getRoute([`/${edit}`, '/edit'])
-			 )
-			}
+	postMultiEdit(req, res) {
+		if (!req.body.ids) {
+			req.flash('danger', 'At least one item must be selected')
+			req.saveSessionAndRedirect(this.getRoute())
+			return;
+		}
+		let ids = req.body.ids
+		if (!Array.isArray(req.body.ids)) {
+			ids = req.body.ids.split(',')
+		}
+
+		if (ids.includes(req.user.id.toString())) {
+			return this.displayError(req, res, 'You cannot edit the logged in user.', this.getRoute())
 		}
 
 		if (req.body.fields) {
-			singleItemCheck(req.body.edit)
-
-			const keys = ['course', 'year', 'status']
-			const values = ['course_id', 'year_id', 'disable']
+			const keys = ['course', 'year', 'role','status']
+			const values = ['course_id', 'year_id', 'role_id','disable']
 			const user = {}
 
 			keys.forEach((k, index) => {
@@ -131,33 +135,33 @@ class UsersController extends BaseController {
 				user.disable = user.disable == 'disabled' ? true : false
 			}
 
-			this.models.users.updateMultiple(req.body.edit, user)
+			this.models.users.updateMultiple(ids, user)
 			.then(() => {
 				req.flash('success', 'User updated')
 				req.saveSessionAndRedirect(this.getRoute())
 			})
 			.catch(err => this.displayError(req, res, err, this.getRoute()))
-		} else {
+		} else {		
 			let persist = {}
 
 			Promise.all([
 				this.models.years.getAll(),
-				this.models.courses.getAll()
+				this.models.courses.getAll(),
+				this.models.roles.getAll()
 			])
-			.then(([years, courses]) => {
-				singleItemCheck(req.body.edit)
-
+			.then(([years, courses, roles]) => {
 				persist = {
 					...persist,
 					years,
-					courses
+					courses,
+					roles
 				}
 
 				var query = this.models.users.query()
-					.getMultipleByIds(req.body.edit)
+					.getMultipleByIds(ids)
 
 				var q2 = this.models.users.rewrap(query)
-				q2.lookup(['course', 'year'])
+				q2.lookup(['course', 'year', 'role'])
 					.orderBy([
 						['barcode', 'asc']
 					])
@@ -165,15 +169,75 @@ class UsersController extends BaseController {
 				return q2.retrieve()
 			})
 			.then(users => {
-				const {years, courses} = persist
+				const {years, courses, roles} = persist
 
 				res.render('edit-multiple', {
 					users,
 					courses,
-					years
+					years,
+					roles
 				})
 			})
 			.catch(err => this.displayError(req, res, err, this.getRoute()))
+		}
+	}
+
+	postMultiRemove(req, res) {
+		const ids = req.body.ids.split(',')
+
+		if (ids.includes(req.user.id.toString())) {
+			return this.displayError(req, res, 'You cannot delete the logged in user.', this.getRoute())
+		}
+
+		if (!req.body.ids) {
+			return this.displayError(req, res, 'At least one user must be selected.', this.getRoute())
+		}
+
+		
+		if (req.body.confirm) {
+			let userLoans = []
+			ids.forEach((id) => {
+				userLoans.push(this.models.items.getOnLoanByUserId(id))
+			})
+			Promise.all(userLoans)
+				.then((items) => {
+					items.forEach(items => {
+						if (items.length) {
+							throw new Error('Users cannot be deleted if they have items on loan to them')
+						}
+					})
+
+					let actions = []
+					ids.forEach((id) => {
+						actions.push(this.models.actions.removeByUserId(id))
+					})
+					Promise.all(actions)
+						.then(() => {
+							this.models.users.removeMultiple(ids)
+								.then(result => {
+									req.flash('success', 'Users removed')
+									req.saveSessionAndRedirect(this.getRoute())
+								})
+								.catch(err => {
+									this.displayError(req, res, err, this.getRoute())
+								})
+						})
+						.catch(err => {
+							this.displayError(req, res, err, this.getRoute())
+						})
+				})
+				.catch(err => {
+					this.displayError(req, res, err, this.getRoute())
+				})
+		} else {
+			this.models.users.getMultipleByIds(ids)
+				.then((users) => {
+					const ids = users.map((i) => {
+						return i.id
+					}).join(',')
+					res.render('confirm-multi-remove', {users, ids})
+				})
+				.catch(err => this.displayError(req, res, err, this.getRoute()))
 		}
 	}
 
@@ -181,7 +245,8 @@ class UsersController extends BaseController {
 		let persist = {}
 		this.models.users.query()
 		.lookup(['printer', 'role', 'course', 'year', 'contact'])
-		.getById(req.params.id)
+		.where([['id', req.params.id]])
+		.retrieveSingle()
 		.then(user => {
 			if (!user) {
 				throw new Error('User not found')
@@ -213,7 +278,8 @@ class UsersController extends BaseController {
 
 		this.models.users.query()
 		.lookup(['printer', 'course', 'year'])
-		.getById(req.params.id)
+		.where([['id', req.params.id]])
+		.retrieveSingle()
 		.then(user => {
 			if (!user) {
 				throw new Error('User not found')
@@ -274,7 +340,7 @@ class UsersController extends BaseController {
 			}
 		}
 
-		auth.generatePassword(req.body.password?req.body.password:'', password => {
+		auth.generatePassword(req.body.password?req.body.password:'').then(password => {
 			if (req.body.password) {
 				if (auth.userCan(req.user, 'users_change_password')) {
 					user.pw_hash = password.hash
@@ -342,8 +408,10 @@ class UsersController extends BaseController {
 	* @param {Object} res Express response object
 	*/
 	postImportData(req, res) {
-		// Test if there are duplicate column headings.
-		if (new Set(req.body.cols).size !== req.body.cols.length) {
+		// Test if there are duplicate column headings, after removing ignored columns
+		const filteredCols = req.body.cols.filter(n => n)
+
+		if (new Set(filteredCols).size !== filteredCols.length) {
 			req.flash('danger', 'Each heading may only be used once.')
 			req.saveSessionAndRedirect(this.getRoute())
 			return
@@ -356,9 +424,11 @@ class UsersController extends BaseController {
 			headingMap[head] = req.body.cols.indexOf(head)
 		})
 
-		var promises = []
-		var _self = this
-		function generateUser(data) {
+		const promises = []
+		const errors = []
+
+		const generateUser = (data) => {
+
 			return new Promise((resolve, reject) => {
 				var user = {
 					name: data[headingMap.name],
@@ -366,30 +436,31 @@ class UsersController extends BaseController {
 					email: data[headingMap.email]
 				}
 
-				if (headingMap.role > 0) {
+				if (data[headingMap.role] > 0) {
 					user.role_id = parseInt(data[headingMap.role])
 				} else if (req.body.role) {
 					user.role_id = parseInt(req.body.role)
+				} else {
+					// students don't need roles
+					user.role_id = null
 				}
 
-				if (headingMap.course > 0) {
+				if (data[headingMap.course] > 0) {
 					user.course_id = parseInt(data[headingMap.course])
 				} else if (req.body.course) {
 					user.course_id = parseInt(req.body.course)
 				} else {
-					req.flash('danger', 'No default course was specified and one of more rows were missing a course')
-					req.saveSessionAndRedirect(this.getRoute())
-					return
+					errors.push('No default course was specified and one of more rows were missing a course')
+					reject(user)
 				}
 
-				if (headingMap.year > 0) {
+				if (data[headingMap.year] > 0) {
 					user.year_id = parseInt(data[headingMap.year])
 				} else if (req.body.year) {
 					user.year_id = parseInt(req.body.year)
 				} else {
-					req.flash('danger', 'No default year was specified and one of more rows were missing a year')
-					req.saveSessionAndRedirect(this.getRoute())
-					return
+					errors.push('No default year was specified and one of more rows were missing a year')
+					reject(user)
 				}
 
 				if (headingMap.password > 0) {
@@ -402,33 +473,34 @@ class UsersController extends BaseController {
 				} else {
 					resolve(user)
 				}
-			})
+			}).catch(err => console.log(err))
 		}
 
-		// Process data into item objects.
 		req.body.users.forEach(data => {
 			promises.push(generateUser(data))
 		})
 
 		Promise.all(promises)
 		.then(users => {
+			if (errors.length === 0 ) {
+				this.models.users.create(users)
+					.then(result => {
+						req.flash('success', 'Users imported')
+						req.saveSessionAndRedirect(this.getRoute())
+					}).catch(err => this.displayError(req, res, err, this.getRoute('/import')))
+				}
 
-			console.log("\n\n\n\n USERS:")
-			console.log(users)
-
-			this.models.users.create(users)
-				.then(result => {
-					req.flash('success', 'Users imported')
-					req.saveSessionAndRedirect(this.getRoute())
-				})
-				.catch(err => this.displayError(req, res, err, this.getRoute('/import')))
+			else {
+				const errList =  [...new Set(errors)]
+				errList.forEach(error => req.flash('danger', error))
+				req.saveSessionAndRedirect(this.getRoute('/import'))
+			}
 		})
 	}
 
 	getUserRemove(req, res) {
 		if (req.params.id == req.user.id) {
-			this.displayError(req, res, 'You cannot delete the logged in user.', this.getRoute())
-			return
+			return this.displayError(req, res, 'You cannot delete the logged in user.', this.getRoute())
 		}
 
 		let persist = {}
@@ -462,8 +534,7 @@ class UsersController extends BaseController {
 
 	postUserRemove(req, res) {
 		if (req.params.id == req.user.id) {
-			this.displayError(req, res, 'You cannot delete the logged in user.', this.getRoute())
-			return
+			return this.displayError(req, res, 'You cannot delete the logged in user.', this.getRoute())
 		}
 
 		let _user
@@ -508,8 +579,7 @@ class UsersController extends BaseController {
 	getEmail(req, res) {
 		let persist = {}
 		this.models.users.query()
-		.lookup(['course','contact'])
-		.getById(req.params.id)
+		.getContactById(req.params.id)
 		.then(user => {
 			if (!user) {
 				throw new Error('User not found')
@@ -528,16 +598,76 @@ class UsersController extends BaseController {
 				req.saveSessionAndRedirect(this.getRoute())
 				return
 			}
-			const {user} = persist
-			var email = `Hello ${user.name},\n\nYou currently have the following item${items.length > 1 ? 's' : ''} on loan which ${items.length > 1 ? 'are' : 'is'} due back:\n\n`
-			for (var i in items) {
-				var item = items[i]
-				email += ` ∙ ${item.name} (${item.barcode})\n`
+
+			if (!req.user.template_id) {
+				req.flash('warning', 'You must set an email template for your profile')
+				req.saveSessionAndRedirect(this.getRoute())
+				return
 			}
-			res.render('email', {
-				user,
-				email
+
+			const {user} = persist
+
+			const to = {
+				name: user.name,
+				address: user.email
+			}
+						
+			const replyTo = {
+				name: req.user.name,
+				address: req.user.email
+			}
+
+			const tags = {
+				name: to.name,
+				items: items.map((item) => {return `\t• ${item.name} (${item.barcode})`}).join("\n"),
+				org: Options.getText('organisation_name'),
+				sender: replyTo.name
+			}
+
+			Mail.queueTemplate(to, replyTo, req.user.template_subject, req.user.template_body, tags)
+			req.flash('success', `Email queued to send to ${user.name}`)
+			req.saveSessionAndRedirect(`${this.getRoute()}/${user.id}`)
+		})
+		.catch(err => this.displayError(req, res, err, this.getRoute()))
+	}
+
+	postMultiEmail(req, res) {
+		const ids = req.body.ids.split(',')
+		this.models.users.query().getMultipleByIds(ids)
+		.then(users => {
+			if (!req.user.template_id) {
+				req.flash('warning', 'You must set an email template for your profile')
+				req.saveSessionAndRedirect(this.getRoute())
+				return
+			}
+						
+			const replyTo = {
+				name: req.user.name,
+				address: req.user.email
+			}
+
+			users.forEach((user) => {
+				this.models.items.getOnLoanByUserId(user.id).then(items => {
+					if (items.length > 0) {
+						const to = {
+							name: user.name,
+							address: user.email
+						}
+
+						const tags = {
+							name: to.name,
+							items: items.map((item) => {return `\t• ${item.name} (${item.barcode})`}).join("\n"),
+							org: Options.getText('organisation_name'),
+							sender: replyTo.name
+						}
+			
+						Mail.queueTemplate(to, replyTo, req.user.template_subject, req.user.template_body, tags)	
+					}
+				})
 			})
+			
+			req.flash('success', `Emails queued`)
+			req.saveSessionAndRedirect(`${this.getRoute()}`)
 		})
 		.catch(err => this.displayError(req, res, err, this.getRoute()))
 	}

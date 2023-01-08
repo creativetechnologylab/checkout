@@ -1,0 +1,10 @@
+extends ../../../src/views/base.pug
+
+block prepend title
+	- title = 'Create Template'
+	- breadcrumb.push({name: 'Create'})
+	- menu = 'templates'
+
+block contents
+	- action = 'Create'
+	include partials/form.pug

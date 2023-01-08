@@ -1,12 +1,14 @@
 extends ../../../src/views/base.pug
 
 block prepend title
-	- title = "Import items"
-	- heading = title
+	- title = "Import Items"
+	- breadcrumb.push({name: 'Import'})
+	- menu = 'items'
 
 block contents
 	p Data must include a header row.
 	form(method="post" action="/items/process")
+		+csrf
 		.form-group
 			label(for="format").col-form-label Format
 			.col-md-1.row

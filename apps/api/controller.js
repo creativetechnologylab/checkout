@@ -15,6 +15,8 @@ const Users = require('../../src/models/users.js')
 const Actions = require('../../src/models/actions.js')
 const Courses = require('../../src/models/courses.js')
 const Years = require('../../src/models/years.js')
+const Departments = require('../../src/models/departments.js')
+const Printers = require('../../src/models/printers.js')
 
 const Print = require('../../src/js/print')
 
@@ -30,17 +32,59 @@ class ApiController extends BaseController {
 			actions: new Actions(),
 			courses: new Courses(),
 			years: new Years(),
+			departments: new Departments(),
+			printers: new Printers(),
 		}
 	}
 
 	/**
-	* Search end point that searches both users
-	* and items by barcode and name
+	* Search end point that searches various fields
+	* by barcode and name
 	*
 	* @param {Object} req Express request object
 	* @param {Object} res Express response object
 	*/
 	getSearch(req, res) {
+		const {term} = req.params
+		Promise.all([
+			this.models.users.search(term),
+			this.models.items.search(term),
+			this.models.groups.search(term),
+			this.models.locations.search(term),
+			this.models.departments.search(term),
+			this.models.courses.search(term),
+			this.models.years.search(term)
+		])
+		.then(([users, items, groups, locations, departments, courses, years]) => {
+			let result = {}
+
+			if (auth.userCan(req.user, 'items_read'))
+				result.items = items
+			if (auth.userCan(req.user, 'users_read'))
+				result.users = users
+			if (auth.userCan(req.user, 'groups_read'))
+				result.groups = groups
+			if (auth.userCan(req.user, 'courses_read'))
+				result.courses = courses
+			if (auth.userCan(req.user, 'years_read'))
+				result.years = years
+			if (auth.userCan(req.user, 'locations_read'))
+				result.locations = locations
+			if (auth.userCan(req.user, 'departments_read'))
+				result.departments = departments
+
+			res.json(result)
+		})
+	}
+
+	/**
+	* Find end point that searches both users
+	* and items by barcode and name
+	*
+	* @param {Object} req Express request object
+	* @param {Object} res Express response object
+	*/
+	getFind(req, res) {
 		const {term} = req.params
 		Promise.all([
 			this.models.users.search(term),
@@ -53,7 +97,7 @@ class ApiController extends BaseController {
 				items
 			})
 		})
- }
+	}
 
 	/**
 	* Returns the type of object that is found
@@ -296,11 +340,15 @@ class ApiController extends BaseController {
 				case AVAILABILITY.LOST:
 					action = ACTIONS.FOUND
 					break
+				case AVAILABILITY.SOLD:
+					action = ACTIONS.REPLACED
+					break
 			}
 
 			return this.models.actions.create({
 				item_id: item.id,
 				action,
+				user_id: item.owner_id ? item.owner_id : null,
 				operator_id: req.user.id
 			})
 		})
@@ -339,7 +387,7 @@ class ApiController extends BaseController {
 
 			return res.json({
 				status: 'success',
-				message: 'Successfully posted as broken',
+				message: 'Successfully marked as broken',
 				barcode: item.barcode
 			})
 		})
@@ -354,11 +402,54 @@ class ApiController extends BaseController {
 	* @param {Object} res Express response object
 	*/
 	postLost(req, res) {
+		let persist = {}
 		this.models.items.lost(req.params.item)
 		.then(item => {
+			persist.item = item
+
+			return this.models.actions.create({
+				item_id: item.id,
+				action: ACTIONS.LOST,
+				operator_id: req.user.id
+			})
+		})
+		.then(() => {
+			const {item} = persist
+
 			return res.json({
 				status: 'success',
-				message: 'Successfully posted as lost',
+				message: 'Successfully marked as lost',
+				barcode: item.barcode
+			})
+		})
+		.catch(err => this.displayErrorJson(req, res, err))
+	}
+
+	/**
+	* Marks an item as sold and logs an action
+	* nothing that
+	*
+	* @param {Object} req Express request object
+	* @param {Object} res Express response object
+	*/
+	postSold(req, res) {
+		let persist = {}
+		this.models.items.sold(req.params.item)
+		.then(item => {
+			persist.item = item
+
+			return this.models.actions.create({
+				item_id: item.id,
+				action: ACTIONS.SOLD,
+				operator_id: req.user.id
+			})
+		})
+		.then(() => {
+			const {item} = persist
+
+			return res.json({
+				status: 'success',
+				message: 'Successfully marked as sold',
 				barcode: item.barcode
 			})
 		})
@@ -469,6 +560,31 @@ class ApiController extends BaseController {
 			res.json({
 				message: 'Item issued',
 				status: 'success'
+			})
+		})
+		.catch(err => this.displayErrorJson(req, res, err))
+	}
+
+	/**
+	* Change the current users selected printer
+	*
+	* @param {Object} req Express request object
+	* @param {Object} res Express response object
+	*/
+	getSelectLabel(req, res) {
+		this.models.printers.getById(req.params.id)
+		.then(printer => {
+			if (!printer) {
+				throw ({
+					message: 'Unknown printer'
+				})
+			}
+			this.models.users.update(res.locals.loggedInUser.id, {printer_id: printer.id})
+			.then((result) => {
+				res.json({
+					status: 'success',
+					printer: printer.label
+				})
 			})
 		})
 		.catch(err => this.displayErrorJson(req, res, err))

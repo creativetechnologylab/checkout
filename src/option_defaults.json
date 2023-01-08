@@ -1,0 +1,54 @@
+{
+	"application_name": {
+		"default": "Checkout",
+		"purpose": "Displayed in the header, footer and login screen."
+	},
+	"organisation_name": {
+		"default": "University of Something",
+		"purpose": "Displayed under the application name on the login screen and in the footer."
+	},
+	"github_url": {
+		"default": "https://github.com/ual-cci/checkout",
+		"purpose": "URL of GitHub repository in the footer.",
+		"example": "https://github.com/username/checkout"
+	},
+	"password_tries": {
+		"default": 5,
+		"purpose": "Number of allowed user login attempts before the account is locked out."
+	},
+	"kiosk_tries": {
+		"default": 10,
+		"purpose": "Number of allowed kiosk login attempts before kiosk mode is disabled."
+	},
+	"public_catalogue": {
+		"default": "false",
+		"purpose": "Make the catalogue of items available without login."
+	},
+	"smtp_from_address": {
+		"default": "",
+		"purpose": "Where should emails come from?",
+		"example": "Checkout <checkout@example.com>"
+	},
+	"smtp_url": {
+		"default": "",
+		"purpose": "SMTP Hostname",
+		"example": "smtp.example.com"
+	},
+	"smtp_username": {
+		"default": "",
+		"purpose": "SMTP Username",
+		"example": "checkout@example.com"
+	},
+	"smtp_password": {
+		"default": "",
+		"purpose": "SMTP Password"
+	},
+	"smtp_port": {
+		"default": "587",
+		"purpose": "SMTP Port"
+	},
+	"smtp_secure": {
+		"default": "false",
+		"purpose": "SMTP Secure"
+	}
+}

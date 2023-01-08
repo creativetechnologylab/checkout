@@ -1,15 +1,13 @@
 extends ../../../src/views/base.pug
 
 block prepend title
-	- title = "Printers"
-	- heading = title
+	- title = 'Printers'
+	- menu = 'printers'
 
-block header
-	h2=heading
-		if currentUserCan('printers_create')
-			a( href="/printers/create" ).btn.btn-outline-success.btn-m.float-right
-				span.fas.fa-plus
-				|  Create
+block buttons
+	if currentUserCan('printers_create')
+		+btn('sm', 'outline-success', 'plus', 'Create Printer', '/printers/create')
+	+search
 
 block contents
 	include partials/list.pug

@@ -1,0 +1,11 @@
+extends ../../../src/views/base.pug
+
+block prepend title
+	- title = 'Edit Template'
+	- breadcrumb.push({name: template.name})
+	- breadcrumb.push({name: 'Edit'})
+	- menu = 'templates'
+
+block contents
+	- action = 'Update'
+	include partials/form.pug

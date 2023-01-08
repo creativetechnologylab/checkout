@@ -28,7 +28,7 @@ class GroupController extends BaseController {
 
 	postCreate(req, res) {
 		if (req.body.name == '') {
-			this.displayError(req, res, '', this.getRoute('/create'), 'The group requires a name')
+			return this.displayError(req, res, '', this.getRoute('/create'), 'The group requires a name')
 		}
 
 		const group = {
@@ -46,6 +46,10 @@ class GroupController extends BaseController {
 		.catch(err => this.displayError(req, res, err, this.getRoute(), 'Error creating group - '))
 	}
 
+	getSingle(req, res) {
+		res.redirect(this.getRoute(`/${req.params.id}/edit`))
+	}
+
 	getEdit(req, res) {
 		this.models.groups.getById(req.params.id)
 		.then(group => {
@@ -60,7 +64,7 @@ class GroupController extends BaseController {
 
 	postEdit(req, res) {
 		if (req.body.name == '') {
-			this.displayError(req, res, '', this.getRoute('/edit'), 'The group requires a name')
+			return this.displayError(req, res, '', this.getRoute(`/${req.params.id}/edit`), 'The group requires a name')
 		}
 
 		const group = {

@@ -28,7 +28,7 @@ class DepartmentController extends BaseController {
 
 	postCreate(req, res) {
 		if (req.body.name == '') {
-			this.displayError(req, res, 'The department requires a name', this.getRoute('/create'), 'Error creating - ')
+			return this.displayError(req, res, 'The department requires a name', this.getRoute('/create'), 'Error creating - ')
 		}
 
 		var brand = req.body.brand
@@ -40,6 +40,10 @@ class DepartmentController extends BaseController {
 			req.saveSessionAndRedirect(this.mountPath)
 		})
 		.catch(err => this.displayError(req, res, err, this.getRoute('/create'), 'Department not created - '))
+	}
+
+	getSingle(req, res) {
+		res.redirect(this.getRoute(`/${req.params.id}/edit`))
 	}
 
 	getEdit(req, res) {
@@ -56,7 +60,7 @@ class DepartmentController extends BaseController {
 
 	postEdit(req, res) {
 		if (req.body.name == '') {
-			this.displayError(req, res, 'The department requires a name', this.getRoute([`/${req.params.id}`, '/edit']), 'Error editing - ')
+			return this.displayError(req, res, 'The department requires a name', this.getRoute([`/${req.params.id}`, '/edit']), 'Error editing - ')
 		}
 
 		var brand = req.body.brand

@@ -19,20 +19,18 @@ if roles.length > 0
 			tbody
 				for role in roles
 					tr
-						td=role.name
+						td(data-searchable=role.name)=role.name
 						if currentUserCan('users_read')
 							td
-								a( href="/users/?role=" + role.id ).btn.btn-sm.btn-outline-dark
+								a( href="/users/?role=" + role.id ).btn.btn-sm.btn-outline-secondary
 									span.fas.fa-user
 									|  Users
 						if currentUserCan({or:['roles_edit','roles_remove','roles_set_permissions']})
 							td
 								if currentUserCan('roles_edit')
 									+editBtn( '/roles/' + role.id + '/edit' )
-									+space
 								if currentUserCan('roles_set_permissions')
 									+btn( 'sm', 'outline-primary', 'user-lock', 'Set Permissions', '/roles/' + role.id + '/permissions' )
-									+space
 								if currentUserCan('roles_remove')
 									+removeBtn( '/roles/' + role.id + '/remove' )
 else

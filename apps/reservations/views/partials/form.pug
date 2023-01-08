@@ -1,4 +1,5 @@
 form( method="post" )
+	+csrf
 	.form-group.row
 		label( for="start_date" ).col-lg-2.col-form-label Start date
 		.col-lg-4
@@ -17,4 +18,4 @@ form( method="post" )
 		.col-lg-4.offset-lg-2
 			button( type="submit" ).btn.btn-primary=action
 			|  
-			a( href="/reservations" ).btn.btn-outline-dark Cancel
+			a( href="/reservations" ).btn.btn-outline-secondary Cancel

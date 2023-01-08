@@ -3,15 +3,13 @@ if history.length > 0
 		thead
 			tr
 				th Action
-				th User
 				th When
-				th To
+				th To/By
 				th Operator
 		tbody
 			for row in history
 				tr
 					td: +status( row.action )
-					td: +user( row.user_name, row.user_id )
 					td: +relative( row.datetime )
 					td: +user( row.owner_name, row.owner_id )
 					td: +user( row.operator_name, row.operator_id )

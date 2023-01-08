@@ -6,7 +6,7 @@ if courses.length > 0
 				col( width="20%" )
 				col( width="20%" )
 				col( width="20%" )
-			thead
+			thead.border-top-0
 				tr
 					th Name
 						| 
@@ -20,20 +20,18 @@ if courses.length > 0
 				for course in courses
 					tr
 						td=course.name
-						td: +user( course.contact_name, course.contact_id )
+						td(data-searchable=course.name): +user( course.contact_name, course.contact_id )
 						if currentUserCan({or: ['users_read','items_read']})
 							td
 								if currentUserCan('users_read')
-									+btn( 'sm', 'outline-dark', 'user', 'Users', '/users/?course=' + course.id )
-									+space
+									+btn( 'sm', 'outline-secondary', 'user', 'Users', '/users/?course=' + course.id )
 								if currentUserCan('items_read')
-									+btn( 'sm', 'outline-dark', 'box', 'Items', '/items/?course=' + course.id )
+									+btn( 'sm', 'outline-secondary', 'box', 'Items', '/items/?course=' + course.id )
 						if currentUserCan({or:['courses_edit','courses_remove']})
 							td
 								if currentUserCan('courses_edit')
 									+editBtn( '/courses/' + course.id + '/edit' )
-									+space
 								if currentUserCan('courses_remove')
 									+removeBtn( '/courses/' + course.id + '/remove' )
 else
-	+messageBlock( 'warning', 'black','There are no courses to display.' )
+	+messageBlock( 'warning', 'black', 'There are no courses to display.' )

@@ -1,0 +1,12 @@
+extends ../../../src/views/base.pug
+
+block prepend title
+	- title = 'Email Templates'
+	- menu = 'templates'
+
+block buttons
+	if currentUserCan('templates_create')
+		+btn('sm', 'outline-success', 'plus', 'Create Email Template', '/templates/create')
+
+block contents
+	include partials/list.pug

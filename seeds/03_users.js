@@ -1,4 +1,4 @@
-const faker = require('faker')
+const {faker} = require('@faker-js/faker')
 const auth = require('../src/js/authentication.js')
 const { createFactory } = require('./_helper')
 
@@ -19,7 +19,7 @@ function createUsers(knex, printerId, courseId, yearId, roleId, password) {
 				printer_id: printerId,
 				course_id: courseId,
 				year_id: yearId,
-				barcode: faker.phone.phoneNumber().split(' ').join(''),
+				barcode: faker.phone.number().split(' ').join(''),
 				pw_iterations: password.iterations,
 				role_id: roleId
 			}
@@ -64,7 +64,7 @@ exports.seed = (knex) => {
 		getRole(knex),
 		getPassword(TEST_PASSWORD)
 	])
-		.then(([printer, course, year, role, password]) => {
-			return createUsers(knex, printer.id, course.id, year.id, role.id, password)
-		})
+	.then(([printer, course, year, role, password]) => {
+		return createUsers(knex, printer.id, course.id, year.id, role.id, password)
+	})
 }

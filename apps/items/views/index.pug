@@ -1,38 +1,99 @@
 extends ../../../src/views/base.pug
 
 block prepend title
-	- wide = true
 	- title = "Items"
-	- heading = title
+	- menu = 'items'
+	- filter_path = '/items/'
 
-block header
-	h2=heading
-		if currentUserCan('items_import')
-			a( href="/items/import" ).btn.btn-outline-success.btn-m.float-right.ml-2
-				span.fas.fa-file-csv
-				|  Import Items
-		if currentUserCan('items_generate')
-			a( href="/items/generate" ).btn.btn-outline-success.btn-m.float-right.ml-2
-				span.fas.fa-magic
-				|  Generate Items
-		if currentUserCan('items_create')
-			a( href="/items/create" ).btn.btn-outline-success.btn-m.float-right.ml-2
-				span.fas.fa-plus
-				|  Create Item
+block append js
+	script(src="/js/multiaction.js")
+
+block buttons
+	if currentUserCan('items_import')
+		+btn('sm', 'outline-success', 'file-csv', 'Import Items', '/items/import')
+	if currentUserCan('items_create')
+		+btn('sm', 'outline-success', 'plus', 'Create Items', '/items/create')
+	.dropdown.me-2
+		button(type="button" data-bs-toggle="dropdown").btn.btn-outline-secondary.btn-sm.dropdown-toggle
+			span.fas.fa-bolt
+			|  Reports
+		.dropdown-menu.dropdown-menu-right
+			h6.dropdown-header Due
+			a( href="/items/?due=overdue" ).dropdown-item Overdue
+			a( href="/items/?due=today" ).dropdown-item Today
+			.dropdown-divider
+			h6.dropdown-header Status
+			a( href="/items/?status=available" ).dropdown-item Available
+			a( href="/items/?status=on-loan" ).dropdown-item On Loan
+			a( href="/items/?status=broken" ).dropdown-item Broken
+			a( href="/items/?status=lost" ).dropdown-item Lost
+			.dropdown-divider
+			h6.dropdown-header Audit
+			a( href="/items/?audited=auditpoint&scanned=true" ).dropdown-item Scanned
+			a( href="/items/?audited=auditpoint&scanned=false" ).dropdown-item Missing
+	.btn-group.me-2
+		button(type="submit" form="filter").btn.btn-outline-secondary.btn-sm
+			span.fas.fa-filter
+			|  Filter
+		button(type="button" data-bs-toggle="dropdown").btn.btn-outline-secondary.btn-sm.dropdown-toggle
+		.dropdown-menu.dropdown-menu-right
+			h6.dropdown-header Item Categorisation
+			a(data-bs-toggle="collapse" href="#groupFilter").dropdown-item Group
+			a(data-bs-toggle="collapse" href="#locationFilter").dropdown-item Location
+			a(data-bs-toggle="collapse" href="#departmentFilter").dropdown-item Department
+			a(data-bs-toggle="collapse" href="#courseFilter").dropdown-item Course
+			a(data-bs-toggle="collapse" href="#yearFilter").dropdown-item Year
+			.dropdown-divider
+			h6.dropdown-header Item Meta Data
+			a(data-bs-toggle="collapse" href="#statusFilter").dropdown-item Status
+			a(data-bs-toggle="collapse" href="#loanableFilter").dropdown-item Loanable
+			a(data-bs-toggle="collapse" href="#dueFilter").dropdown-item Due
+			a(data-bs-toggle="collapse" href="#auditedFilter").dropdown-item Audited
+			a(data-bs-toggle="collapse" href="#scannedFilter").dropdown-item Scanned
+	if Object.values(selected).join('') != ''
+		a(href=filter_path + "?clear=").btn.btn-outline-secondary.btn-sm.me-2
+			span.fas.fa-times
+			|  Clear
+	+search
+
 
 block contents
-	- filter_path = '/items/'
 	include partials/filter.pug
-	form#items-form( action="/items/edit", method="post" )
-		- edit = true
+	form#multi-form
+		+csrf
+		- actionable = true
+		- sortable = true
+
+		// Load user column preference
+		- columns = loggedInUser.columns.items
+
+		// Always show the edit column
+		- columns.push('edit')
+		
+		// Show columns that are filtered on
+		for k in Object.keys(selected)
+			if selected[k] != ''
+				- columns.push(k)
+
+		// Add sort by column
+		- columns.push(sortby.split('_')[0])
+		
+		// Add owner if course/year shown
+		if columns.includes('course') || columns.includes('year')
+			- columns.push('owner')
+
 		include partials/list.pug
-		if items && items.length > 0
 			if currentUserCan('items_multi_edit')
-				button( type="submit" ).btn.btn-sm.btn-primary
+				button(disabled type="button" data-action="/items/edit").multi.btn.btn-sm.btn-primary
 					span.fas.fa-pencil-alt
-					|  Edit Selected
+					|  Edit
+				|  
+			if currentUserCan('items_multi_remove')
+				button(disabled type="button" data-action="/items/remove").multi.btn.btn-sm.btn-danger
+					span.far.fa-trash-alt
+					|  Remove
 				|  
 			if currentUserCan('print')
-				button#multi-print(disabled type="button" ).btn.btn-sm.btn-outline-dark
+				button(disabled type="button" data-action="/items/label").multi.btn.btn-sm.btn-outline-secondary
 					span.fas.fa-print
-					|  Print Selected Labels
+					|  Print Labels

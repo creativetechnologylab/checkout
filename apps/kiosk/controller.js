@@ -2,6 +2,7 @@ const BaseController = require('../../src/js/common/BaseController.js')
 
 const config = require('./config.json')
 const auth = require('../../src/js/authentication')
+const Options = require('../../src/js/options')()
 
 const Users = require('../../src/models/users')
 
@@ -38,6 +39,7 @@ class KioskController extends BaseController {
 				if (user) {
 					req.login({id: user.id, km: true}, err => {
 						if (err) throw new Error(err)
+						req.session.kioskMode = Options.getText('kiosk_tries')
 						req.saveSessionAndRedirect('/checkout')
 					})
 				} else {
@@ -71,8 +73,17 @@ class KioskController extends BaseController {
 	}
 
 	postEnable(req, res) {
-		req.session.kioskMode = process.env.USER_PW_TRIES
+		req.session.kioskMode = Options.getText('kiosk_tries')
 		req.logout()
+		req.saveSessionAndRedirect('/kiosk')
+	}
+
+	getFixed(req, res) {
+		let kiosks = process.env.KIOSKS
+		if (kiosks && kiosks.includes(req.query.serialNumber)) {
+			req.session.kioskMode = Options.getText('kiosk_tries')
+			req.logout()
+		}
 		req.saveSessionAndRedirect('/kiosk')
 	}
 

@@ -2,14 +2,12 @@ extends ../../../src/views/base.pug
 
 block prepend title
 	- title = "Courses"
-	- heading = title
+	- menu = 'courses'
 
-block header
-	h2=heading
-		if currentUserCan('courses_create')
-			a( href="/courses/create" ).btn.btn-outline-success.btn-m.float-right
-				span.fas.fa-plus
-				|  Create
+block buttons
+	if currentUserCan('courses_create')
+		+btn('sm', 'outline-success', 'plus', 'Create Course', '/courses/create')
+	+search
 
 block contents
 	include partials/list.pug

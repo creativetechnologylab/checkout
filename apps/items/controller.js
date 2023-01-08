@@ -12,7 +12,7 @@ const Actions = require('../../src/models/actions.js')
 // TODO
 const Print = require('../../src/js/print')
 const {getSortBy} = require('../../src/js/utils.js')
-const {AVAILABILITY, SORTBY_MUTATIONS} = require('../../src/js/common/constants')
+const {AVAILABILITY, ACTIONS, SORTBY_MUTATIONS} = require('../../src/js/common/constants')
 
 const moment = require('moment')
 
@@ -44,12 +44,15 @@ class ItemController extends BaseController {
 	* @param {Object} res Express response object
 	*/
 	_checkFields(checks, redirect, req, res) {
+		let failed = false
 		for (let i = 0; i < checks.length; i++) {
 			if (checks[i].condition) {
 				this.displayError(req, res, checks[i].message, this.getRoute(redirect))
+				failed = true
 				break
 			}
 		}
+		return failed
 	}
 
 	_getAuditPoint(audited, userAuditPoint = false) {
@@ -180,33 +183,29 @@ class ItemController extends BaseController {
 	* @param {Object} res Express response object
 	*/
 	postMultiEdit(req, res) {
-		// If the ID passed is singular, redirect
-		// to the single edit form
-		const singleItemCheck = (edit) => {
-			if (!Array.isArray(edit)) {
-				this.displayError(
-					req,
-					res,
-					'Only one item was selected for group editing, use the single edit form',
-					this.getRoute([`/${edit}`, '/edit'])
-			 )
-			}
+		if (!req.body.ids) {
+			req.flash('danger', 'At least one item must be selected')
+			req.saveSessionAndRedirect(this.getRoute())
+			return;
 		}
 
+		let ids = req.body.ids
+		if (!Array.isArray(req.body.ids)) {
+			ids = req.body.ids.split(',')
+		}
+		
 		// Checks if its a request with data
 		if (req.body.fields) {
-			singleItemCheck(req.body.edit)
-
-			const keys = ['label', 'group', 'location', 'department', 'notes', 'value', 'serialnumber', 'loanable']
-			const values = ['label', 'group_id', 'location_id', 'department_id', 'notes', 'value', 'serialnumber', 'loanable']
+			const keys = ['name', 'label', 'group', 'location', 'department', 'notes', 'value', 'serialnumber', 'loanable', 'info_url', 'alert_msg']
+			const values = ['name', 'label', 'group_id', 'location_id', 'department_id', 'notes', 'value', 'serialnumber', 'loanable', 'info_url', 'alert_msg']
 			const item = {}
 
 			keys.forEach((k, index) => {
-				if (req.body.fields.indexOf(k) >= 0 && req.body[k])
+				if (req.body.fields.indexOf(k) >= 0)
 					item[values[index]] = req.body[k]
 			})
 
-			this.models.items.updateMultiple(req.body.edit, item)
+			this.models.items.updateMultiple(ids, item)
 			.then(result => {
 				req.flash('success', 'Items updated')
 				req.saveSessionAndRedirect(this.getRoute())
@@ -221,13 +220,12 @@ class ItemController extends BaseController {
 				this.models.departments.getAll()
 			])
 			.then(([groups, locations, departments]) => {
-
 				this.models.items.query()
 				.orderBy([
 					['barcode', 'asc']
 				])
 				.expose()
-				.whereIn('items.id', req.body.edit)
+				.whereIn('items.id', ids)
 				.then(items => {
 					res.render('edit-multiple', {
 						items,
@@ -240,13 +238,59 @@ class ItemController extends BaseController {
 		}
 	}
 
+	postMultiRemove(req, res) {
+		if (!req.body.ids) {
+			req.flash('danger', 'At least one item must be selected')
+			req.saveSessionAndRedirect(this.getRoute())
+			return;
+		}
+
+		const ids = req.body.ids.split(',')
+
+		if (req.body.confirm) {
+			if (!req.body.ids) {
+				req.flash('danger', 'At least one item must be selected')
+				req.saveSessionAndRedirect(this.getRoute())
+				return;
+			}
+
+			let actions = []
+			ids.forEach((id) => {
+				actions.push(this.models.actions.removeByItemId(id))
+			})
+			Promise.all(actions)
+				.then(() => {
+					this.models.items.removeMultiple(ids)
+						.then(result => {
+							req.flash('success', 'Items removed')
+							req.saveSessionAndRedirect(this.getRoute())
+						})
+						.catch(err => {
+							this.displayError(req, res, err, this.getRoute())
+						})
+				})
+				.catch(err => {
+					this.displayError(req, res, err, this.getRoute())
+				})
+		} else {
+			this.models.items.getMultipleByIds(ids)
+				.then((items) => {
+					const ids = items.map((i) => {
+						return i.id
+					}).join(',')
+					res.render('confirm-multi-remove', {items, ids})
+				})
+				.catch(err => this.displayError(req, res, err, this.getRoute()))
+		}
+	}
+
 	/**
-	* Get generate page with necessary data
+	* Get create page with necessary data
 	*
 	* @param {Object} req Express request object
 	* @param {Object} res Express response object
 	*/
-	getGenerate(req, res) {
+	getCreate(req, res) {
 		Promise.all([
 			this.models.locations.getAll(),
 			this.models.departments.getAll(),
@@ -254,11 +298,51 @@ class ItemController extends BaseController {
 		])
 		.then(([locations, departments, groups]) => {
 			if (locations.length > 0) {
-				res.render('generate', {locations: locations, departments: departments, groups: groups, item: {}})
+				res.render('create', {locations: locations, departments: departments, groups: groups, item: {}, template:false})
 			} else {
 				req.flash('warning', 'Create at least one location before creating items')
 				req.saveSessionAndRedirect(this.getRoute())
 			}
+		})
+	}
+
+	/**
+	* Gets the item and populates a template create page
+	*
+	* @param {Object} req Express request object
+	* @param {Object} res Express response object
+	*/
+	getTemplateItem(req, res) {
+		Promise.all([
+			this.models.locations.getAll(),
+			this.models.departments.getAll(),
+			this.models.groups.getAll(),
+			this.models.items.getById(req.params.id)
+		])
+		.then(([locations, departments, groups, item]) => {
+			if (!item) {
+				throw new Error('Item not found')
+			}
+
+			if (locations.length > 0) {
+				// Get the first number in the barcode and suggest it as the next item				
+				let start = item.barcode.match(/[0-9]+/g)
+				if (start != undefined) {
+					start = parseInt(start[0])
+					if (Number.isInteger(start)) item.start = start + 1
+				}
+
+				// Convert numbers in barcode to hashes and suggest it as the barcode generation label
+				item.barcode = item.barcode.replaceAll(/[0-9]/g, '#')
+
+				res.render('create', {locations: locations, departments: departments, groups: groups, item: item, template:true})
+			} else {
+				req.flash('warning', 'Create at least one location before creating items')
+				req.saveSessionAndRedirect(this.getRoute())
+			}
+		})
+		.catch(err => {
+			this.displayError(req, res, err, `${this.getRoute()}/${req.params.id}`)
 		})
 	}
 
@@ -268,93 +352,122 @@ class ItemController extends BaseController {
 	* @param {Object} req Express request object
 	* @param {Object} res Express response object
 	*/
-	postGenerate(req, res) {
+	postCreate(req, res) {
+		const quantity = parseInt(req.body.quantity)
 		const start = parseInt(req.body.start)
-		const end = (start + parseInt(req.body.qty)) - 1
+		const end = (start + quantity) - 1
+		const barcode = req.body.barcode.trim()
+		const barcodeFilter = barcode.match(/^([\S\s]*?)([#]+)$/)
 
 		const checks = [
 			{
+				condition: (barcode == ''),
+				message: 'The item(s) require a barcode'
+			},
+			{
+				condition: (quantity > 1 && barcodeFilter == null),
+				message: 'To generate multiple items the barcode must include # symbol(s) at the end'
+			},
+			{
+				condition: (barcode.includes('#') && quantity < 2),
+				message: 'To generate multiple items you must specify how many'
+			},
+			{
 				condition: (req.body.name == ''),
-				message: 'The items require a name'
+				message: 'The item(s) require a name'
 			},
 			{
-				condition: (req.body.prefix == ''),
-				message: 'The items require a barcode prefix'
-			},
-			{
-				condition: (req.body.prefix.length < 3 == null),
-				message: 'The barcode prefix must be longer than 2 characters.'
-			},
-			{
-				condition: (start == '' || start < 1),
+				condition: (quantity > 1 && (start == '' || start < 1)),
 				message: 'The item numbering must start at 1 or above'
 			},
 			{
-				condition: (end > 25 && ! req.body.largeBatch),
-				message: 'You can\'t generate more than 25 items at a time without confirming you want to do this'
+				condition: (req.body.location == ''),
+				message: 'The item(s) must be assigned to a location'
 			},
 			{
-				condition: (req.body.location == ''),
-				message: 'The items must be assigned to a location'
+				condition: (quantity > 1 && req.body.serialnumber),
+				message: 'You cannot assign the serial number of an item when generating more than 1'
 			}
 		]
 
-		this._checkFields(checks, '/generate', req, res)
+		if (!this._checkFields(checks, '/create', req, res)) {
+			const items = []
+			const barcodes = []
+			let numLen = 2
+			if (barcodeFilter) numLen = barcodeFilter[2].length
 
-		const items = []
-		const barcodes = []
+			this.models.departments.getById(req.body.department)
+			.then((department) => {
+				for (let i = 0; i < quantity; i++) {
+					let x = start + i
 
-		this.models.departments.getById(req.body.department)
-		.then((department) => {
-			for (let i = start; i <= end; i++) {
-				let item = {
-					name: req.body.name.trim(),
-					barcode: req.body.prefix,
-					label: req.body.label,
-					value: req.body.value,
-					location_id: req.body.location,
-					department_id: req.body.department,
-					notes: req.body.notes,
-					status: AVAILABILITY.AVAILABLE,
-					loanable: (req.body.loanable == 'true' ? true : false)
-				}
+					let item = {
+						name: req.body.name.trim(),
+						barcode: barcode,
+						label: req.body.label,
+						value: req.body.value,
+						location_id: req.body.location,
+						department_id: req.body.department,
+						info_url: req.body.info_url,
+						notes: req.body.notes,
+						alert_msg: req.body.alert_msg,
+						status: AVAILABILITY.AVAILABLE,
+						loanable: (req.body.loanable == 'true' ? true : false)
+					}
 
-				if (!req.body.value) {
-					item.value = 0.0
-				}
+					if (quantity == 1) {
+						item.serialnumber = req.body.serialnumber
+					}
 
-				if (req.body.group)
-					item.group_id = req.body.group
+					if (!req.body.value) {
+						item.value = 0.0
+					}
 
-				const index = i.toString().padStart(2, '0')
-				if (req.body.suffix) item.name += " #" + index
-				item.barcode += index.toString()
-				barcodes.push({
-					barcode: item.barcode,
-					text: item.name,
-					type: item.label,
-					brand: department.brand
-				})
-				items.push(item)
-			}
-		})
-		.then(() => {
-			this.models.items.create(items)
-			.then(result => {
-				req.flash('success', 'Items created')
+					if (req.body.group) {
+						item.group_id = req.body.group
+					}
 
-				if (req.body.print) {
-					if (req.user.printer_id) {
-						Print.labels(barcodes, req.user.printer_url)
-						req.flash('info', `Labels printed to ${req.user.printer_name}`)
-					} else {
-						req.flash('warning', 'No printer configured')
+					if (quantity > 1 && barcodeFilter) {
+						const index = x.toString().padStart(numLen, '0')
+						item.barcode = barcodeFilter[1] + index.toString()
+					}
+
+					// Push item into array to be inserted into database
+					items.push(item)
+
+					// Push item details into array to be printed
+					if (req.body.print) {
+						barcodes.push({
+							barcode: item.barcode,
+							text: item.name,
+							type: item.label,
+							brand: department.brand
+						})
 					}
 				}
-				req.saveSessionAndRedirect(this.getRoute())
 			})
-			.catch(err => this.displayError(req, res, err, this.getRoute('/generate')))
-		})
+			.then(() => {
+				this.models.items.create(items)
+				.then(id => {
+					req.flash('success', `${items.length} item${items.length > 1 ? 's' : ''} created`)
+
+					if (req.body.print) {
+						if (req.user.printer_id) {
+							Print.labels(barcodes, req.user.printer_url)
+							req.flash('info', `Labels printed to ${req.user.printer_name}`)
+						} else {
+							req.flash('warning', 'No printer configured')
+						}
+					}
+					if (quantity == 1) {
+						req.saveSessionAndRedirect(`${this.getRoute()}/${id[0].id}`)
+					} else {
+						req.saveSessionAndRedirect(this.getRoute())
+					}
+				})
+				.catch(err => this.displayError(req, res, err, this.getRoute('/create')))
+			})
+		}
 	}
 
 	/**
@@ -491,100 +604,6 @@ class ItemController extends BaseController {
 	}
 
 	/**
-	* Gets the data for a create page
-	*
-	* @param {Object} req Express request object
-	* @param {Object} res Express response object
-	*/
-	getCreate(req, res) {
-		Promise.all([
-			this.models.locations.getAll(),
-			this.models.departments.getAll(),
-			this.models.groups.getAll()
-		])
-		.then(([locations, departments, groups]) => {
-			if (locations.length > 0) {
-				res.render('create', {item: null, locations, departments, groups})
-			} else {
-				req.flash('warning', 'Create at least one location before creating items')
-				req.saveSessionAndRedirect(this.getRoute())
-			}
-		})
-	}
-
-	/**
-	* Endpoint for creating an item
-	*
-	* @param {Object} req Express request object
-	* @param {Object} res Express response object
-	*/
-	postCreate(req, res) {
-		this.models.departments.getById(req.body.department)
-		.then((department) => {
-		const item = {
-			name: req.body.name,
-			barcode: req.body.barcode,
-			label: req.body.label,
-			value: req.body.value,
-			location_id: req.body.location,
-			department_id: req.body.department,
-			notes: req.body.notes,
-			serialnumber: req.body.serialnumber,
-			status: AVAILABILITY.AVAILABLE,
-			loanable: (req.body.loanable == 'true' ? true : false)
-		}
-
-		if (!req.body.value) {
-			item.value = 0.0
-		}
-
-		if (req.body.group) {
-			item.group_id = req.body.group
-		}
-
-		const checks = [
-			{
-				condition: (item.name == ''),
-				message: 'The item requires a name'
-			},
-			{
-				condition: (item.barcode == ''),
-				message: 'The item requires a unique barcode'
-			},
-			{
-				condition: (!item.location_id),
-				message: 'The item must be assigned to a location'
-			}
-		]
-
-		this._checkFields(checks, '/create', req, res)
-
-		this.models.items.create(item)
-			.then(id => {
-				req.flash('success', 'Item created')
-
-				if (req.body.print) {
-					if (req.user.printer_id) {
-						Print.label({
-							barcode: item.barcode,
-							text: item.name,
-							type: item.label,
-							brand: department.brand
-						}, req.user.printer_url)
-						req.flash('info', `Label printed to ${req.user.printer_name}`)
-					} else {
-						req.flash('warning', 'No printer configured')
-					}
-				}
-				req.saveSessionAndRedirect(this.getRoute())
-			})
-			.catch(err => {
-				this.displayError(req, res, err, this.getRoute('/create'), 'Error creating item - ')
-			})
-		})
-	}
-
-	/**
 	* Gets the item and the associated action history
 	*
 	* @param {Object} req Express request object
@@ -676,7 +695,7 @@ class ItemController extends BaseController {
 	* @param {Object} req Express request object
 	* @param {Object} res Express response object
 	*/
-	getMulti(req, res) {
+	getMultiPrint(req, res) {
 		if (req.user.printer_id) {
 			this.models.items.getMultipleByIds(req.body.ids.split(','))
 				.then(items => {
@@ -743,7 +762,9 @@ class ItemController extends BaseController {
 			location_id: req.body.location,
 			value: req.body.value,
 			notes: req.body.notes,
+			alert_msg: req.body.alert_msg,
 			serialnumber: req.body.serialnumber,
+			info_url: req.body.info_url,
 			loanable: (req.body.loanable == 'true' ? true : false)
 		}
 
@@ -829,6 +850,169 @@ class ItemController extends BaseController {
 		.then(() => {
 			req.flash('success', "Item and it's history removed")
 			req.saveSessionAndRedirect(this.getRoute())
+		})
+		.catch(err => this.displayError(req, res, err, this.getRoute()))
+	}
+
+	/**
+	* Endpoint for marking an item lost
+	*
+	* @param {Object} req Express request object
+	* @param {Object} res Express response object
+	*/
+	getLost(req, res) {
+		let _item
+		this.models.items.getById(req.params.id)
+		.then(item => {
+			if (!item) {
+				throw new Error('Item not found')
+			}
+
+			_item = item
+
+			return this.models.actions.create({
+				item_id: _item.id,
+				action: ACTIONS.LOST,
+				user_id: item.owner_id ? item.owner_id : null,
+				operator_id: req.user.id
+			})
+		})
+		.then(() => {
+			return this.models.items.lost(_item.barcode)
+		})
+		.then(() => {
+			req.flash('success', "Item marked as lost")
+			if (req.query.returnTo == 'user') {
+				req.saveSessionAndRedirect(`/users/${_item.owner_id}`)
+			} else {
+				req.saveSessionAndRedirect(this.getRoute(`/${req.params.id}`))
+			}
+		})
+		.catch(err => this.displayError(req, res, err, this.getRoute()))
+	}
+
+	/**
+	* Endpoint for marking an item broken
+	*
+	* @param {Object} req Express request object
+	* @param {Object} res Express response object
+	*/
+	getBroken(req, res) {
+		let _item
+		this.models.items.getById(req.params.id)
+		.then(item => {
+			if (!item) {
+				throw new Error('Item not found')
+			}
+
+			_item = item
+
+			return this.models.actions.create({
+				item_id: _item.id,
+				action: ACTIONS.BROKEN,
+				user_id: item.owner_id ? item.owner_id : null,
+				operator_id: req.user.id
+			})
+		})
+		.then(() => {
+			return this.models.items.broken(_item.barcode)
+		})
+		.then(() => {
+			req.flash('success', "Item marked as broken")
+			if (req.query.returnTo == 'user') {
+				req.saveSessionAndRedirect(`/users/${_item.owner_id}`)
+			} else {
+				req.saveSessionAndRedirect(this.getRoute(`/${req.params.id}`))
+			}
+		})
+		.catch(err => this.displayError(req, res, err, this.getRoute()))
+	}
+
+	/**
+	* Endpoint for marking an item sold
+	*
+	* @param {Object} req Express request object
+	* @param {Object} res Express response object
+	*/
+	getSold(req, res) {
+		let _item
+		this.models.items.getById(req.params.id)
+		.then(item => {
+			if (!item) {
+				throw new Error('Item not found')
+			}
+
+			_item = item
+
+			return this.models.actions.create({
+				item_id: _item.id,
+				action: ACTIONS.SOLD,
+				user_id: item.owner_id ? item.owner_id : null,
+				operator_id: req.user.id
+			})
+		})
+		.then(() => {
+			return this.models.items.sold(_item.barcode)
+		})
+		.then(() => {
+			req.flash('success', "Item marked as sold")
+			if (req.query.returnTo == 'user') {
+				req.saveSessionAndRedirect(`/users/${_item.owner_id}`)
+			} else {
+				req.saveSessionAndRedirect(this.getRoute(`/${req.params.id}`))
+			}
+		})
+		.catch(err => this.displayError(req, res, err, this.getRoute()))
+	}
+
+	/**
+	* Endpoint for returning an item
+	*
+	* @param {Object} req Express request object
+	* @param {Object} res Express response object
+	*/
+	getReturn(req, res) {
+		let _item
+		this.models.items.getById(req.params.id)
+		.then(item => {
+			if (!item) {
+				throw new Error('Item not found')
+			}
+
+			_item = item
+
+			let action = ACTIONS.RETURNED
+			switch (item.status) {
+				case AVAILABILITY.BROKEN:
+					action = ACTIONS.REPAIRED
+					break
+				case AVAILABILITY.LOST:
+					action = ACTIONS.FOUND
+					break
+				case AVAILABILITY.SOLD:
+					action = ACTIONS.REPLACED
+					break
+			}
+
+			return this.models.actions.create({
+				item_id: _item.id,
+				action,
+				user_id: item.owner_id ? item.owner_id : null,
+				operator_id: req.user.id
+			})
+		})
+		.then(() => {
+			return this.models.items.return(_item.barcode)
+		})
+		.then(() => {
+			req.flash('success', "Item returned")
+			if (req.query.returnTo == 'user') {
+				req.saveSessionAndRedirect(`/users/${_item.owner_id}`)
+			} else {
+				req.saveSessionAndRedirect(this.getRoute(`/${req.params.id}`))
+			}
+			
+			
 		})
 		.catch(err => this.displayError(req, res, err, this.getRoute()))
 	}

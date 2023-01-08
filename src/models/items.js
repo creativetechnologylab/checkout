@@ -1,3 +1,4 @@
+const db = require('../js/database.js')
 const BaseModel = require('./base.js')
 const {AVAILABILITY} = require('../js/common/constants')
 
@@ -52,7 +53,7 @@ class ItemModel extends BaseModel {
 	}
 
 	get properties() {
-		return ['id', 'name', 'barcode', 'notes', 'value', 'label', 'status', 'audited', 'updated', 'serialnumber', 'issued', 'due', 'loanable']
+		return ['id', 'name', 'barcode', 'notes', 'value', 'label', 'status', 'audited', 'updated', 'serialnumber', 'issued', 'due', 'loanable', 'info_url', 'alert_msg']
 	}
 
 	updateLocation(oldLocationId, newLocationId) {
@@ -116,12 +117,23 @@ class ItemModel extends BaseModel {
 	}
 
 	search(term) {
-		return super.search(term, ['name', 'barcode'], ['name', 'asc'])
+		return super.search(term, ['name', 'barcode', 'serialnumber'], ['barcode', 'asc'])
 	}
 
 	getByBarcode(barcode) {
-		this._safeguard()
-		return this.where([['barcode', barcode]]).retrieveSingle()
+		return this.query().where([['barcode', barcode]]).retrieveSingle()
+	}
+
+	getCatalogue() {
+		return this.emptyQuery()
+			.expose()
+			.select('items.name',
+				db.raw(`SUM(CASE WHEN "items"."status" = 'available' THEN 1 ELSE 0 END) AS available`),
+				db.raw(`ARRAY_REMOVE(ARRAY_AGG(DISTINCT "items"."info_url"), NULL) AS urls`))
+			.count('items.id AS stock')
+			.orderBy('name', 'asc')
+			.where('loanable', true)
+			.groupBy('items.name')
 	}
 
 	audit(barcode) {
@@ -172,6 +184,10 @@ class ItemModel extends BaseModel {
 
 	lost(barcode) {
 		return this.changeStatus(barcode, AVAILABILITY.LOST)
+	}
+	
+	sold(barcode) {
+		return this.changeStatus(barcode, AVAILABILITY.SOLD)
 	}
 
 	issue(itemId, userId, operator, dueDate) {

@@ -1,32 +1,44 @@
 version: "3"
 services:
-  db:
-    image: "postgres:9.6"
+  postgres:
+    image: "postgres:10-alpine"
     networks:
-      - checkout
+      - database
     volumes:
-      - ./database:/var/lib/postgresql/data
+      - pg_data:/var/lib/postgresql/data
     env_file: ./docker.env
-  web:
+  nodejs:
     build:
-      context: "./"
-    ports:
-      - "3000:3000"
+      context: .
     networks:
-      - checkout
+      - database
+      - web
     depends_on:
-      - db
+      - postgres
     restart: unless-stopped
     env_file: ./docker.env
     environment:
-      - POSTGRES_HOST=db
+      - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
       - APP_HOST=
       - APP_PORT=3000
       - APP_COOKIE=checkout_session
-      - USER_PW_ITERATIONS=50000
-      - USER_PW_TRIES=5
+      - USER_PW_ITERATIONS=350000
       - LOG_PATH=./logs
       - LOG_STDOUT=true
+  nginx:
+    build:
+      context: ./docker/nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    restart: always
+    depends_on:
+      - nodejs
+    networks:
+      - web
 networks:
-  checkout:
+  database:
+  web:
+volumes:
+  pg_data:

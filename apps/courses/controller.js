@@ -53,7 +53,7 @@ class CoursesController extends BaseController {
 	*/
 	postCreate(req, res) {
 		if (req.body.name == '') {
-			this.displayError(req, res, 'The course requires a name', this.getRoute('/create'))
+			return this.displayError(req, res, 'The course requires a name', this.getRoute('/create'))
 		}
 
 		const course = {
@@ -70,6 +70,10 @@ class CoursesController extends BaseController {
 			req.saveSessionAndRedirect(this.mountPath)
 		})
 		.catch(err => this.displayError(req, res, err, this.getRoute('/create'), 'Unable to create course – '))
+	}
+
+	getSingle(req, res) {
+		res.redirect(this.getRoute(`/${req.params.id}/edit`))
 	}
 
 	/**
@@ -104,7 +108,7 @@ class CoursesController extends BaseController {
 	*/
 	postEdit(req, res) {
 		if (req.body.name == '') {
-			this.displayError(req, res, 'The course requires a name', this.getRoute())
+			return this.displayError(req, res, 'The course requires a name', this.getRoute())
 		}
 
 		const course = {

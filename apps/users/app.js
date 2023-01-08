@@ -9,6 +9,7 @@ app.set('views', __dirname + '/views')
 
 app.use((req, res, next) => {
 	req.controller = new UsersController()
+	res.locals.breadcrumb.push({name: app.locals.app_title, url: app.mountpath})
 	next()
 })
 
@@ -19,7 +20,17 @@ app.get('/', auth.currentUserCan('users_read'), (req, res) => {
 
 // Edit multiple
 app.post('/edit', auth.currentUserCan('users_multi_edit'), (req, res) => {
-	req.controller.postEdit(req, res)
+	req.controller.postMultiEdit(req, res)
+})
+
+// Remove multiple
+app.post('/remove', auth.currentUserCan('users_multi_remove'), (req, res) => {
+	req.controller.postMultiRemove(req, res)
+})
+
+// Email multiple users
+app.post('/email', auth.currentUserCan('users_email'), (req, res) => {
+	req.controller.postMultiEmail(req, res)
 })
 
 // Import users
@@ -59,7 +70,7 @@ app.post('/:id/remove', auth.currentUserCan('users_remove'), (req, res) => {
 })
 
 // Reset password attempts for user
-app.get('/:id/email', auth.currentUserCan('users_read'), (req, res) => {
+app.get('/:id/email', auth.currentUserCan('users_email'), (req, res) => {
 	req.controller.getEmail(req, res)
 })
 

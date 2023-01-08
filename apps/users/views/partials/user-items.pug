@@ -1,16 +1,43 @@
 if items.length > 0
 	.table-responsive
 		table.table.table-striped
+			colgroup
+				col(width="40%")
+				col(width="15%")
+				col(width="15%")
+				if currentUserCan({or: ['items_return', 'items_broken', 'items_lost', 'items_sold']})
+					col(width="30%")
 			thead
 				tr
 					th Name
 					th Barcode
 					th When
+					if currentUserCan({or: ['items_return', 'items_broken', 'items_lost', 'items_sold']})
+						th Actions
 			tbody
 				for item in items
 					tr
-						td: +item( item.name, item.id )
+						td: +item( item.name, item.id, item.info_url )
 						td: +clipboard( item.barcode )
 						td: +relative( item.updated )
+						if currentUserCan({or: ['items_return', 'items_broken', 'items_lost', 'items_sold']})
+							td
+								.btn-group
+									if currentUserCan('items_return')
+										a(href=`/items/${item.id}/return?returnTo=user`, title=`Return ${item.name}`).btn.btn-outline-secondary.btn-sm
+											span.fas.fa-sign-in-alt
+											|  Return
+									if currentUserCan('items_broken')
+										a(href=`/items/${item.id}/broken?returnTo=user`, title=`Mark ${item.name} broken`).btn.btn-outline-secondary.btn-sm
+											span.fas.fa-heart-broken
+											|  Broken
+									if currentUserCan('items_lost')
+										a(href=`/items/${item.id}/lost?returnTo=user`, title=`Mark ${item.name} lost`).btn.btn-outline-secondary.btn-sm
+											span.fas.fa-compass
+											|  Lost
+									if currentUserCan('items_sold')
+										a(href=`/items/${item.id}/sold?returnTo=user`, title=`Mark ${item.name} sold`).btn.btn-outline-secondary.btn-sm
+											span.fas.fa-cash-register
+											|  Sold
 else
 	p There are no items to display.

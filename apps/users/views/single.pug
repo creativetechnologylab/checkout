@@ -2,24 +2,25 @@ extends ../../../src/views/base.pug
 
 block prepend title
 	- title = user.name
-	- heading = title
+	- menu = 'users'
+	- breadcrumb.push({name: user.name})
 
-block header
-	h2=heading
-		if onloan.length > 0
-			.btn-group.float-right(style='margin-left:.25em;')
-				a( href="/users/" + user.id + "/email", title=`Email ${user.name}` ).btn.btn-outline-dark.btn-m
-					span.fas.fa-envelope
-					|  Generate email
-		.btn-group.float-right
-			if currentUserCan('users_edit')
-				a( href="/users/" + user.id + "/edit", title=`Edit ${user.name}` ).btn.btn-outline-dark.btn-m
-					span.fas.fa-pencil-alt
-					|  Edit
-			if currentUserCan('users_remove')
-				a( href="/users/" + user.id + "/remove", title=`Remove ${user.name}` ).btn.btn-outline-dark.btn-m
-					span.fas.fa-times
-					|  Remove
+block buttons
+	if currentUserCan('users_email') && onloan.length > 0
+		.btn-group.float-right(style='margin-left:.25em;')
+			a( href="/users/" + user.id + "/email", title=`Email ${user.name}` ).btn.btn-outline-secondary.btn-sm
+				span.fas.fa-envelope
+				|  Generate email
+		|  &nbsp;
+	.btn-group.float-right
+		if currentUserCan('users_edit')
+			a( href="/users/" + user.id + "/edit", title=`Edit ${user.name}` ).btn.btn-outline-primary.btn-sm
+				span.fas.fa-pencil-alt
+				|  Edit
+		if currentUserCan('users_remove')
+			a( href="/users/" + user.id + "/remove", title=`Remove ${user.name}` ).btn.btn-outline-danger.btn-sm
+				span.far.fa-trash-alt
+				|  Remove
 
 block contents
 	include partials/info.pug
